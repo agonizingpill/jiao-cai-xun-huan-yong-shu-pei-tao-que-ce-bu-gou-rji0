@@ -1,6 +1,7 @@
 from sqlalchemy import select,func
 import numpy as np
 from .db import Base,engine,Session
+from .constants import DP_TOTAL_EPSILON_MICRO
 from .models import *
 from .auth import hashed
 
@@ -36,4 +37,6 @@ def seed():
         for i in range(96):
             code='HIST-'+str(i+1).zfill(3);subjects=patterns[int(rng.choice(4,p=[.4,.3,.2,.1]))]
             if not s.scalar(select(HistoricalBasket.id).where(HistoricalBasket.code==code)):s.add(HistoricalBasket(code=code,subjects=subjects))
-        s.commit();return {m.__tablename__:s.scalar(select(func.count()).select_from(m))for m in (User,Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry,HistoricalBasket)}
+        if not s.scalar(select(DpBudget.id).where(DpBudget.name=='site')):s.add(DpBudget(name='site',total_micro=DP_TOTAL_EPSILON_MICRO,spent_micro=0))
+        s.commit();return {m.__tablename__:s.scalar(select(func.count()).select_from(m))for m in (User,Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry,HistoricalBasket,DpBudget,DpRelease)}
+

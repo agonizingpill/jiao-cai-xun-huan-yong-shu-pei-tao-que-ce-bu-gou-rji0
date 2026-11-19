@@ -6,6 +6,9 @@ x-app: &app
     REDIS_URL: redis://redis:6379/0
     JWT_SECRET: ${JWT_SECRET:-local-book-circulation-change-me}
     SEED_DEMO: ${SEED_DEMO:-true}
+    DP_TOTAL_EPSILON: ${DP_TOTAL_EPSILON:-100}
+    DP_RELEASE_EPSILON: ${DP_RELEASE_EPSILON:-20}
+    DP_RESERVED_GRACE_SECONDS: ${DP_RESERVED_GRACE_SECONDS:-20}
     OPENBLAS_NUM_THREADS: 1
   volumes: [artifacts:/artifacts]
   depends_on:

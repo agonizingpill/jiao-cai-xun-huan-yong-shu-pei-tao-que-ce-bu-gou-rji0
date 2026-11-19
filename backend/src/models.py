@@ -1,4 +1,4 @@
-from sqlalchemy import Column,Integer,String,ForeignKey,JSON,UniqueConstraint,CheckConstraint
+from sqlalchemy import Column,Integer,BigInteger,String,ForeignKey,JSON,UniqueConstraint,CheckConstraint
 from .db import Base
 from .constants import COPY_CONDITIONS,PACK_STATES,ASSIGNMENT_STATES
 class User(Base):
@@ -50,3 +50,25 @@ class DepositEntry(Base):
 class HistoricalBasket(Base):
     __tablename__='historical_baskets'
     id=Column(Integer,primary_key=True);code=Column(String(40),unique=True,nullable=False);subjects=Column(JSON,nullable=False)
+    def __init__(self,**kw):
+        super().__init__(**kw);self.code=self.code.strip().upper();self.subjects=sorted({str(x).strip().lower() for x in self.subjects})
+
+class DpBudget(Base):
+    # One row per ledger (site-wide in practice).  The row is locked for update so
+    # concurrent publications serialize against a single shared epsilon balance.
+    __tablename__='dp_budgets'
+    id=Column(Integer,primary_key=True);name=Column(String(40),unique=True,nullable=False)
+    total_micro=Column(Integer,nullable=False);spent_micro=Column(Integer,default=0,nullable=False)
+    __table_args__=(CheckConstraint('spent_micro>=0'),CheckConstraint('spent_micro<=total_micro'))
+class DpRelease(Base):
+    # One statistical batch.  snapshot is the digest of the exact basket sample
+    # that was counted; it is the idempotency key for "same sample, same stats".
+    __tablename__='dp_releases'
+    id=Column(Integer,primary_key=True)
+    snapshot=Column(String(64),unique=True,nullable=False)
+    epsilon_micro=Column(Integer,nullable=False);state=Column(String(20),default='reserved')
+    basket_payload=Column(JSON,nullable=False)
+    noise_seed=Column(BigInteger,nullable=False)
+    ledger_debit_micro=Column(Integer,nullable=False)
+    result=Column(JSON);error=Column(String(450))
+    attempts=Column(Integer,default=0,nullable=False);attempted_at=Column(Integer,default=0,nullable=False)

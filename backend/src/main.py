@@ -11,7 +11,7 @@ from .schemas import *
 from .common import lock,inventory_lock,pack,add,audit
 from .auth import current,writer,supervisor,verify,token
 from .middleware import Trace,Burst
-from . import pack_service as packs,circulation_service as circulation
+from . import pack_service as packs,circulation_service as circulation,dp_service as dp
 q=redis.Redis.from_url(os.environ['REDIS_URL'],decode_responses=True)
 @asynccontextmanager
 async def lifespan(app):
@@ -74,12 +74,30 @@ def pack_new(d:PackInput,s=Depends(session),u=Depends(writer)):
     x=packs.create(s,d,u);s.commit();return x
 @app.post('/packs/{id}/recommend')
 def recommend(id:int,s=Depends(session),u=Depends(writer)):
-    p=lock(s,Pack,id)
-    if p.ml_state not in ('recorded','failed'):raise HTTPException(409,'只可估计新配套或失败重试')
-    p.ml_state='queued';p.error=None;s.commit()
-    try:q.rpush('book-baskets',id)
-    except Exception:p.ml_state='failed';p.error='队列不可用，恢复后可重新排队';s.commit();raise HTTPException(503,p.error)
+    if not s.get(Pack,id):raise HTTPException(404,'业务记录不存在')
+    outcome=dp.publish(s)
+    p=dp.attach(s,id,outcome)
     return pack(p)
+@app.post('/statistics/publish')
+def publish_statistics(s=Depends(session),u=Depends(writer)):
+    outcome=dp.publish(s)
+    release=outcome['release']
+    return {'stat_version':release.id,'charged':outcome['charged'],'stale':outcome['stale'],'state':dp.state(s)}
+@app.get('/statistics')
+def statistics(s=Depends(session),u=Depends(current)):
+    return dp.state(s)
+@app.get('/statistics/{id}')
+def statistic(id:int,s=Depends(session),u=Depends(supervisor)):
+    release=dp.retrieve(s,id)
+    # Supervisor-only: the noisy statistics, never the exact sample digest or the
+    # raw basket payload used to compute it.
+    return {'stat_version':release.id,'state':release.state,'epsilon':release.epsilon_micro/1_000_000,'result':release.result,'error':release.error}
+@app.post('/statistics/recover')
+def recover_statistics(s=Depends(session),u=Depends(supervisor)):
+    return {'recovered':dp.recover(s,force=True),'state':dp.state(s)}
+@app.post('/historical-baskets')
+def historical_basket(d:BasketInput,s=Depends(session),u=Depends(writer)):
+    x=add(s,HistoricalBasket(code=d.code,subjects=d.subjects));audit(s,u,'补录历史课程篮 '+d.code);s.commit();return x
 @app.post('/packs/{id}/reserve')
 def reserve(id:int,s=Depends(session),u=Depends(supervisor)):
     x=packs.reserve(s,id,u);s.commit();return x

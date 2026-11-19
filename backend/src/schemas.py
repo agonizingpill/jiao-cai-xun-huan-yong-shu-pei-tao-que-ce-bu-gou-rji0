@@ -21,3 +21,12 @@ class DepositInput(BaseModel):amount_cents:int=Field(ge=100,le=1000000);receipt:
 class ReturnInput(BaseModel):condition:Literal['usable','repair'];damage_cents:int=Field(default=0,ge=0,le=100000);note:str=Field(min_length=4,max_length=250);receipt:str=Field(min_length=4,max_length=80)
 class LossInput(BaseModel):damage_cents:int=Field(ge=1,le=100000);note:str=Field(min_length=6,max_length=250);receipt:str=Field(min_length=4,max_length=80)
 class SettlementInput(BaseModel):receipt:str=Field(min_length=4,max_length=80)
+class BasketInput(BaseModel):
+    code:str=Field(min_length=3,max_length=40);subjects:list[str]=Field(min_length=1)
+    @model_validator(mode='after')
+    def known(self):
+        from .constants import SUBJECT_UNIVERSE
+        cleaned=[x.strip().lower() for x in self.subjects]
+        if len(cleaned)!=len(set(cleaned)) or not set(cleaned)<=set(SUBJECT_UNIVERSE):raise ValueError('课程须在固定课程域内且不重复')
+        self.subjects=sorted(cleaned)
+        return self
